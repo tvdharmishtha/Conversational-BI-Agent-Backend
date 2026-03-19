@@ -1,13 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from analyzer import load_data, analyze_query
-from fastapi import File, UploadFile
 import shutil
+import os
+import pandas as pd
+from analyzer import analyze_query
 
 app = FastAPI()
 
-# CORS (VERY IMPORTANT for Angular)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,24 +16,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-df = load_data()
+DATA_PATH = "data/current.xlsx"
+df = None  # global dataframe
 
 class QueryRequest(BaseModel):
     question: str
 
-@app.post("/ask")
-def ask(req: QueryRequest):
-    return analyze_query(req.question, df)
 
 @app.post("/upload")
 def upload_file(file: UploadFile = File(...)):
-    file_path = f"data/{file.filename}"
+    global df
 
-    with open(file_path, "wb") as buffer:
+    os.makedirs("data", exist_ok=True)
+
+    with open(DATA_PATH, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Reload global dataframe
-    global df
-    df = load_data()
+    df = pd.read_excel(DATA_PATH)
 
     return {"message": "File uploaded successfully"}
+
+
+@app.post("/ask")
+def ask(req: QueryRequest):
+    global df
+
+    if df is None:
+        return {"error": "No file uploaded"}
+
+    return analyze_query(req.question, df)

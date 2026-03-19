@@ -1,68 +1,124 @@
 import pandas as pd
-import os
 from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=__import__("os").environ.get("GROQ_API_KEY"))
 
-def load_data():
-    return pd.read_excel("data/business_data.xlsx")
 
 def get_intent(query):
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {
-                "role": "user",
-                "content": f"""
-                Classify this query into one of:
-                - revenue_trend
-                - product_comparison
-                - stock_analysis
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"""
+Classify into one:
+- revenue_trend
+- product_comparison
+- stock_analysis
 
-                Query: {query}
-                Only return the category name.
-                """
-            }
-        ]
-    )
+Query: {query}
+Only return category.
+"""
+                }
+            ]
+        )
 
-    return response.choices[0].message.content.strip().lower()
+        return response.choices[0].message.content.strip().lower()
+
+    except:
+        return "revenue_trend"  # fallback
 
 
 def analyze_query(query, df):
     intent = get_intent(query)
 
+    # fallback keyword safety
+    if "stock" in query.lower():
+        intent = "stock_analysis"
+    elif "product" in query.lower():
+        intent = "product_comparison"
+    elif "revenue" in query.lower():
+        intent = "revenue_trend"
+    
+    charts = []
+
     if "revenue" in intent:
-        grouped = df.groupby("Month")["Revenue"].sum()
-        return {
-            "type": "line",
-            "x": [str(x) for x in grouped.index],   
-            "y": [int(y) for y in grouped.values],
+        month_col = 'Month'
+        revenue_col = 'Revenue'
+        
+        if month_col in df.columns and revenue_col in df.columns:
+            grouped = df.groupby(month_col)[revenue_col].sum()
+        else:
+            # Use first two columns as fallback
+            if len(df.columns) >= 2:
+                grouped = df.groupby(df.columns[0])[df.columns[1]].sum()
+            else:
+                return {"insight": "Insufficient data columns", "charts": []}
+
+        charts.append({
+            "id": "chart1",
             "title": "Revenue Trend",
-            "insight": "Revenue trend shows growth over time."
-        }
+            "type": "line",
+            "x": [str(x) for x in grouped.index],
+            "y": grouped.values.tolist()
+        })
+
+        insight = "Revenue is showing a trend over time."
 
     elif "comparison" in intent:
-        grouped = df.groupby("Product")["Revenue"].sum()
-        return {
-            "type": "bar",
-            "x": [str(x) for x in grouped.index],   
-            "y": [int(y) for y in grouped.values],
+        product_col = 'Product'
+        revenue_col = 'Revenue'
+        
+        if product_col in df.columns and revenue_col in df.columns:
+            grouped = df.groupby(product_col)[revenue_col].sum()
+        else:
+            # Use first two columns as fallback
+            if len(df.columns) >= 2:
+                grouped = df.groupby(df.columns[0])[df.columns[1]].sum()
+            else:
+                return {"insight": "Insufficient data columns", "charts": []}
+
+        charts.append({
+            "id": "chart1",
             "title": "Product Comparison",
-            "insight": "Boat Headphones outperform Plane Toy."
-        }
+            "type": "bar",
+            "x": grouped.index.tolist(),
+            "y": grouped.values.tolist()
+        })
+
+        insight = "Some products are outperforming others."
 
     elif "stock" in intent:
-        grouped = df.groupby("Product")["Stock"].sum()
-        return {
-            "type": "bar",
-            "x": [str(x) for x in grouped.index],   
-            "y": [int(y) for y in grouped.values],
-            "title": "Stock Analysis",
-            "insight": "Plane Toy stock is lower — needs restock."
-        }
+        product_col = 'Product'
+        stock_col = 'Stock'
+        
+        if product_col in df.columns and stock_col in df.columns:
+            grouped = df.groupby(product_col)[stock_col].sum()
+        else:
+            # Use first two columns as fallback
+            if len(df.columns) >= 2:
+                grouped = df.groupby(df.columns[0])[df.columns[1]].sum()
+            else:
+                return {"insight": "Insufficient data columns", "charts": []}
 
-    return {"error": "AI could not understand"}
+        charts.append({
+            "id": "chart1",
+            "title": "Stock Analysis",
+            "type": "bar",
+            "x": grouped.index.tolist(),
+            "y": grouped.values.tolist()
+        })
+
+        insight = "Stock levels vary across products."
+
+    else:
+        return {"insight": "Could not understand query", "charts": []}
+
+    return {
+        "insight": insight,
+        "charts": charts
+    }
