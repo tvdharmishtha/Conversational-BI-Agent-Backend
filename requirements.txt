@@ -2,3 +2,5 @@ fastapi
 uvicorn
 pandas
 openpyxl
+groq
+python-dotenv

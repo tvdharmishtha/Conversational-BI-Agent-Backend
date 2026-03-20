@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import shutil
 import os
 import pandas as pd
-from analyzer import analyze_query
+from analyzer import analyze_query, get_column_info
 
 app = FastAPI()
 
@@ -19,8 +19,14 @@ app.add_middleware(
 DATA_PATH = "data/current.xlsx"
 df = None  # global dataframe
 
+
 class QueryRequest(BaseModel):
     question: str
+
+
+class ColumnsResponse(BaseModel):
+    columns: list
+    column_types: dict
 
 
 @app.post("/upload")
@@ -34,7 +40,32 @@ def upload_file(file: UploadFile = File(...)):
 
     df = pd.read_excel(DATA_PATH)
 
-    return {"message": "File uploaded successfully"}
+    # Get column information
+    column_info = get_column_info(df)
+
+    return {
+        "message": "File uploaded successfully",
+        "columns": column_info["columns"],
+        "column_types": column_info["column_types"],
+        "row_count": len(df)
+    }
+
+
+@app.get("/columns")
+def get_columns():
+    global df
+
+    if df is None:
+        return {"error": "No file uploaded", "columns": [], "column_types": {}}
+
+    column_info = get_column_info(df)
+
+    return {
+        "columns": column_info["columns"],
+        "column_types": column_info["column_types"],
+        "row_count": len(df),
+        "preview": df.head(5).to_dict(orient='records')
+    }
 
 
 @app.post("/ask")
