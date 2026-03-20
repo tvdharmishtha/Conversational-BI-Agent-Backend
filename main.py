@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import shutil
 import os
 import pandas as pd
-from analyzer import analyze_query, get_column_info
+from analyzer import analyze_query, get_column_info, suggest_currency
 
 app = FastAPI()
 
@@ -42,12 +42,16 @@ def upload_file(file: UploadFile = File(...)):
 
     # Get column information
     column_info = get_column_info(df)
+    
+    # Get currency suggestion
+    currency_info = suggest_currency(df)
 
     return {
         "message": "File uploaded successfully",
         "columns": column_info["columns"],
         "column_types": column_info["column_types"],
-        "row_count": len(df)
+        "row_count": len(df),
+        "currency": currency_info
     }
 
 
